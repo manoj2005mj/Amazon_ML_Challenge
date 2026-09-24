@@ -1,0 +1,70 @@
+{
+  "algorithm": "exact_country_name_and_address_v1",
+  "candidates": {
+    "S2": {
+      "emitted_pairs": 106302,
+      "file": "train_source2.tsv",
+      "matched_records": 106302,
+      "rows": 5034616,
+      "seconds": 147.96037
+    },
+    "S3": {
+      "emitted_pairs": 325,
+      "file": "train_source3.tsv",
+      "matched_records": 325,
+      "rows": 5285603,
+      "seconds": 84.651376
+    }
+  },
+  "compression_level": 6,
+  "generated_at_utc": "2026-09-24T21:33:40.309052+00:00",
+  "index_seconds": 65.921498,
+  "match_mode": "intersection",
+  "max_rows_per_shard": 5000000,
+  "normalization": "Unicode casefold, then remove every character except ASCII a-z and 0-9",
+  "reference": {
+    "file": "train_source1.tsv",
+    "rows": 2206821,
+    "unique_address_keys_by_country": {
+      "India": 854115,
+      "US": 1274325
+    },
+    "unique_name_keys_by_country": {
+      "India": 559493,
+      "US": 957042
+    }
+  },
+  "rule_counts": {
+    "address": 0,
+    "name": 0,
+    "name+address": 106627
+  },
+  "shards": [
+    {
+      "candidate_source": "S2",
+      "compressed_bytes": 297714,
+      "country": "India",
+      "file": "block_set_s2_india_part001.tsv.gz",
+      "rows": 25249,
+      "sha256": "bbf618d2782a41ae47e0ad96e2f8319c9ad36e3680b11acb365372f48573fcd7"
+    },
+    {
+      "candidate_source": "S2",
+      "compressed_bytes": 953634,
+      "country": "US",
+      "file": "block_set_s2_us_part001.tsv.gz",
+      "rows": 81053,
+      "sha256": "ff2851343a821f58c77f52fa30aea61b97606b12092ca2a70fb7f2738edb7063"
+    },
+    {
+      "candidate_source": "S3",
+      "compressed_bytes": 4136,
+      "country": "India",
+      "file": "block_set_s3_india_part001.tsv.gz",
+      "rows": 325,
+      "sha256": "9bb172493a8c3e76fd4d542a3f71743716ba78eb5ef3995edf7195ef5f5025b4"
+    }
+  ],
+  "total_pairs": 106627,
+  "total_seconds": 298.892255
+}

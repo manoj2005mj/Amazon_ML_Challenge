@@ -6,8 +6,8 @@ The baseline creates two independent inverted indexes for Source 1:
 * (country, normalized business address)
 
 A Source 2/3 record becomes a candidate for every Source-1 record found by
-either index. Pairs found by both rules are emitted once and marked
-``name+address``.
+either index in ``union`` mode. In ``intersection`` mode, only pairs found by
+both indexes are emitted. Such pairs are marked ``name+address``.
 """
 
 from __future__ import annotations
@@ -213,10 +213,14 @@ def build_block_set(
     *,
     max_rows_per_shard: int = 5_000_000,
     compression_level: int = 6,
+    match_mode: str = "union",
     overwrite: bool = False,
     progress_every: int = 1_000_000,
 ) -> dict[str, object]:
     """Generate the block set and return its manifest."""
+
+    if match_mode not in {"union", "intersection"}:
+        raise ValueError("match_mode must be 'union' or 'intersection'")
 
     started = time.perf_counter()
     _prepare_output_dir(output_dir, overwrite)
@@ -267,10 +271,29 @@ def build_block_set(
                 address_index.get(country, {}).get(address, ()) if address else ()
             )
 
-            if name_matches or address_matches:
+            if match_mode == "intersection":
+                common_ids: list[bytes] = []
+                if name_matches and address_matches:
+                    address_ids = set(address_matches)
+                    common_ids = [
+                        source1_id
+                        for source1_id in name_matches
+                        if source1_id in address_ids
+                    ]
+                if common_ids:
+                    matched_records += 1
+                for source1_id in common_ids:
+                    writer.write(
+                        source,
+                        country,
+                        source1_id,
+                        candidate_id,
+                        b"name+address",
+                    )
+                    rule_counts["name+address"] += 1
+                    emitted_pairs += 1
+            elif name_matches and address_matches:
                 matched_records += 1
-
-            if name_matches and address_matches:
                 address_ids = set(address_matches)
                 name_ids = set(name_matches)
                 for source1_id in name_matches:
@@ -291,11 +314,13 @@ def build_block_set(
                     rule_counts["address"] += 1
                     emitted_pairs += 1
             elif name_matches:
+                matched_records += 1
                 for source1_id in name_matches:
                     writer.write(source, country, source1_id, candidate_id, b"name")
                     rule_counts["name"] += 1
                     emitted_pairs += 1
             elif address_matches:
+                matched_records += 1
                 for source1_id in address_matches:
                     writer.write(
                         source, country, source1_id, candidate_id, b"address"
@@ -323,7 +348,12 @@ def build_block_set(
     total_pairs = sum(int(item["rows"]) for item in shards)
     total_seconds = time.perf_counter() - started
     manifest: dict[str, object] = {
-        "algorithm": "exact_country_name_or_address_v1",
+        "algorithm": (
+            "exact_country_name_or_address_v1"
+            if match_mode == "union"
+            else "exact_country_name_and_address_v1"
+        ),
+        "match_mode": match_mode,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "normalization": (
             "Unicode casefold, then remove every character except ASCII a-z and 0-9"
@@ -366,6 +396,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max-rows-per-shard", type=int, default=5_000_000)
     parser.add_argument("--compression-level", type=int, default=6)
+    parser.add_argument(
+        "--match-mode",
+        choices=("union", "intersection"),
+        default="union",
+        help=(
+            "union emits pairs sharing name or address; intersection emits only "
+            "pairs sharing both"
+        ),
+    )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--progress-every", type=int, default=1_000_000)
     return parser.parse_args()
@@ -379,6 +418,7 @@ def main() -> None:
         args.output_dir,
         max_rows_per_shard=args.max_rows_per_shard,
         compression_level=args.compression_level,
+        match_mode=args.match_mode,
         overwrite=args.overwrite,
         progress_every=args.progress_every,
     )
@@ -396,4 +436,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

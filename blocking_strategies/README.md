@@ -43,6 +43,40 @@ Verify a generated copy with:
 python blocking_strategies/verify_block_set.py blocking_strategies/block_set
 ```
 
+## Exact intersection mode
+
+To require the same Source-1/candidate pair to have both an exact normalized
+name and an exact normalized address in the same country, use:
+
+```powershell
+python blocking_strategies/build_block_set.py `
+  --reference "C:\path\to\train_source1.tsv" `
+  --source2 "C:\path\to\train_source2.tsv" `
+  --source3 "C:\path\to\train_source3.tsv" `
+  --match-mode intersection `
+  --output-dir blocking_strategies/intersection_block_set
+```
+
+This is the set intersection of the exact-name pair set and exact-address pair
+set. It is intentionally strict: a company with an address variation will not
+be emitted even if its normalized name is identical.
+
+On the complete training data, intersection mode produces 106,627 pairs in
+298.89 seconds:
+
+| Candidate partition | Pairs |
+| --- | ---: |
+| Source 2, India | 25,249 |
+| Source 2, US | 81,053 |
+| Source 3, India | 325 |
+| Source 3, US | 0 |
+| **Total** | **106,627** |
+
+Compared with all 7,638,365 labeled positive links, 106,626 intersection pairs
+are positive and one is negative. That is 99.9991% precision but only 1.3959%
+recall. Intersection is therefore useful as a very high-confidence exact-match
+subset, but it is too restrictive to be the only candidate-generation rule.
+
 ## Full training result
 
 The complete training run produces 23,413,014 unique candidate pairs from

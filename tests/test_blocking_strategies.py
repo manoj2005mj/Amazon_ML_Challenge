@@ -73,7 +73,53 @@ class BlockingStrategyTests(unittest.TestCase):
                     rules.extend(row["blocking_rules"] for row in csv.DictReader(handle, delimiter="\t"))
             self.assertEqual(rules.count("name+address"), 2)
 
+    def test_intersection_emits_only_pairs_matching_both_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            reference = root / "source1.tsv"
+            source2 = root / "source2.tsv"
+            source3 = root / "source3.tsv"
+            output = root / "intersection_block_set"
+            write_tsv(
+                reference,
+                [
+                    ["A1", "Acme", "1 Main", "US"],
+                    ["A2", "Acme", "2 Main", "US"],
+                    ["A3", "Beta", "1 Main", "US"],
+                    ["A4", "Acme", "1 Main", "India"],
+                ],
+            )
+            write_tsv(
+                source2,
+                [
+                    ["B1", "Acme", "9 Side", "US"],
+                    ["B2", "Gamma", "1 Main", "US"],
+                    ["B3", "Acme", "1 Main", "US"],
+                ],
+            )
+            write_tsv(source3, [["C1", "Acme", "1 Main", "India"]])
+
+            manifest = build_block_set(
+                reference,
+                [("S2", source2), ("S3", source3)],
+                output,
+                max_rows_per_shard=3,
+                compression_level=1,
+                match_mode="intersection",
+                progress_every=0,
+            )
+
+            self.assertEqual(manifest["algorithm"], "exact_country_name_and_address_v1")
+            self.assertEqual(manifest["match_mode"], "intersection")
+            self.assertEqual(manifest["total_pairs"], 2)
+            self.assertEqual(
+                manifest["rule_counts"],
+                {"name": 0, "address": 0, "name+address": 2},
+            )
+            self.assertEqual(manifest["candidates"]["S2"]["matched_records"], 1)
+            self.assertEqual(manifest["candidates"]["S3"]["matched_records"], 1)
+            self.assertEqual(verify(output), {"shards": 2, "rows": 2})
+
 
 if __name__ == "__main__":
     unittest.main()
-
