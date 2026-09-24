@@ -1,0 +1,11 @@
+{
+  "raw_dataset_dir": "C:/Users/manoj/Downloads/amazon ML resource/student_resource/dataset",
+  "output_dir": "data/prepared/quickstart",
+  "data_fraction": 0.01,
+  "validation_fraction": 0.10,
+  "random_seed": 2026,
+  "negative_to_positive_ratio": 1.0,
+  "minimum_negatives_per_source1": 2,
+  "negative_pool_size_per_source_country": 20000
+}
+

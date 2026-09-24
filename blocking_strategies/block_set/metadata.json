@@ -1,0 +1,93 @@
+{
+  "algorithm": "exact_country_name_or_address_v1",
+  "candidates": {
+    "S2": {
+      "emitted_pairs": 11313646,
+      "file": "train_source2.tsv",
+      "matched_records": 1384756,
+      "rows": 5034616,
+      "seconds": 142.367168
+    },
+    "S3": {
+      "emitted_pairs": 12099368,
+      "file": "train_source3.tsv",
+      "matched_records": 1296548,
+      "rows": 5285603,
+      "seconds": 129.192727
+    }
+  },
+  "compression_level": 6,
+  "generated_at_utc": "2026-09-24T21:04:00.815098+00:00",
+  "index_seconds": 67.147495,
+  "max_rows_per_shard": 5000000,
+  "normalization": "Unicode casefold, then remove every character except ASCII a-z and 0-9",
+  "reference": {
+    "file": "train_source1.tsv",
+    "rows": 2206821,
+    "unique_address_keys_by_country": {
+      "India": 854115,
+      "US": 1274325
+    },
+    "unique_name_keys_by_country": {
+      "India": 559493,
+      "US": 957042
+    }
+  },
+  "rule_counts": {
+    "address": 670706,
+    "name": 22635681,
+    "name+address": 106627
+  },
+  "shards": [
+    {
+      "candidate_source": "S2",
+      "compressed_bytes": 12725863,
+      "country": "India",
+      "file": "block_set_s2_india_part001.tsv.gz",
+      "rows": 1459362,
+      "sha256": "a9ac61ba24525a4a19e0e64c80b2ccc5f4b3828a8d984e5c092dca8eff885734"
+    },
+    {
+      "candidate_source": "S2",
+      "compressed_bytes": 37215892,
+      "country": "US",
+      "file": "block_set_s2_us_part001.tsv.gz",
+      "rows": 5000000,
+      "sha256": "83c7aa35dc9458f93ab6a1bcfa29b8b97078c9bd63452d3a02b87e4ecd1c3d5e"
+    },
+    {
+      "candidate_source": "S2",
+      "compressed_bytes": 36145347,
+      "country": "US",
+      "file": "block_set_s2_us_part002.tsv.gz",
+      "rows": 4854284,
+      "sha256": "4ce0300c1821059f8b5ddc6bf7eee9fd133d136e7037f9bbcff2497fb28a355e"
+    },
+    {
+      "candidate_source": "S3",
+      "compressed_bytes": 18041316,
+      "country": "India",
+      "file": "block_set_s3_india_part001.tsv.gz",
+      "rows": 2234271,
+      "sha256": "87c0dd27847082204a94161b7dde2d6507b00d23b6f6d537de99831ddd01463b"
+    },
+    {
+      "candidate_source": "S3",
+      "compressed_bytes": 36789745,
+      "country": "US",
+      "file": "block_set_s3_us_part001.tsv.gz",
+      "rows": 5000000,
+      "sha256": "3e923b96a7e4b2010bef157dfddb51641c188d92113d3bf0ea95c794d709660d"
+    },
+    {
+      "candidate_source": "S3",
+      "compressed_bytes": 35797088,
+      "country": "US",
+      "file": "block_set_s3_us_part002.tsv.gz",
+      "rows": 4865097,
+      "sha256": "4039e1dddeed6104f15cd1ff9aa843ddcd6e1bb02feaa123530f1927133bc612"
+    }
+  ],
+  "total_pairs": 23413014,
+  "total_seconds": 339.72043
+}
