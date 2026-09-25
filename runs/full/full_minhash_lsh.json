@@ -1,0 +1,58 @@
+{
+  "by_country": {
+    "India": {
+      "candidate_pairs": 176054,
+      "entities": 8806,
+      "f05_ceiling": 0.7304274743830649,
+      "pair_completeness": 0.6150324675324675,
+      "pairs_per_entity_mean": 19.99250511015217,
+      "true_links": 30800
+    },
+    "US": {
+      "candidate_pairs": 266177,
+      "entities": 13317,
+      "f05_ceiling": 0.8680148693999228,
+      "pair_completeness": 0.7703958915686147,
+      "pairs_per_entity_mean": 19.98776000600736,
+      "true_links": 46149
+    }
+  },
+  "candidate_pairs": 442231,
+  "entities_fully_recovered": 0.5065220507429882,
+  "entities_with_no_candidates": 0.0,
+  "eval_entities": 22123,
+  "f05_ceiling": 0.8132485808984333,
+  "macro_recall": 0.7087706033116707,
+  "pair_completeness": 0.7082093334546258,
+  "pairs_per_entity_max": 20,
+  "pairs_per_entity_mean": 19.989648781810786,
+  "pairs_per_entity_p50": 20.0,
+  "pairs_per_entity_p95": 20.0,
+  "params": {
+    "bands": 21,
+    "fields": [
+      "name_key",
+      "addr_key"
+    ],
+    "hash_mode": "oph",
+    "k": 10,
+    "max_bucket_size": 200,
+    "max_pairs_per_band": 5000000,
+    "max_shingles_per_chunk": 1000000,
+    "min_jaccard": 0.2,
+    "num_perm": 63,
+    "perm_block": 16,
+    "reduce_every": 7,
+    "rows_per_band": 3,
+    "score_chunk": 200000,
+    "seed": 20260925,
+    "shingle_size": 4,
+    "target_threshold": 0.3625
+  },
+  "peak_rss_mb": 4334.6,
+  "recovered_links": 54496,
+  "reduction_ratio": 0.999996277166883,
+  "seconds": 485.013,
+  "strategy": "minhash_lsh[oph,b21xr3,s4,k10]",
+  "true_links": 76949
+}

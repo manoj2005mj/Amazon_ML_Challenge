@@ -93,6 +93,24 @@ The three rule rows overlap: the union is `name + address - both`.
 In the emitted `blocking_rules` column, the mutually exclusive counts are
 22,635,681 `name`, 670,706 `address`, and 106,627 `name+address` rows.
 
+## Superseded by the strategy bake-off
+
+The limitation noted below was acted on. `blocking_strategies/harness/` adds a
+measurement harness and `blocking_strategies/strategies/` six alternative
+candidate generators; `blocking_strategies/benchmark.py` runs sweeps.
+
+On the full training data the best candidate set reaches an **F0.5 ceiling of
+0.9769** with pair completeness 0.9407, against **0.5331 / 0.3007** for the
+exact-match baseline documented here. The single biggest cause of the gap was
+not the retrieval algorithm but this file's normalization: deleting every
+character outside `[a-z0-9]` empties the name key of 9.05% of Source-2 records
+(Odia, Devanagari and Telugu business names), and 13.92% of all ground-truth
+links join an ASCII name to a non-ASCII one.
+
+See [../docs/BLOCKING_EVALUATION.md](../docs/BLOCKING_EVALUATION.md) for the
+methodology, the full results table, and two conclusions the dev fixture got
+wrong.
+
 ## Limitation
 
 This is a fast baseline, not the final blocking design. On the prepared 1%

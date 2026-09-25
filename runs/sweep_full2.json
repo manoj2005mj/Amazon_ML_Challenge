@@ -1,0 +1,6 @@
+[
+  ["full_token_idf_k5",  "token_idf", {"k": 5,  "max_df": 0.005}],
+  ["full_token_idf_k20", "token_idf", {"k": 20, "max_df": 0.005}],
+  ["full_simhash_lsh",   "simhash_lsh", {"k": 10}],
+  ["full_token_idf_k10_min2", "token_idf", {"k": 10, "max_df": 0.005, "min_shared": 2}]
+]

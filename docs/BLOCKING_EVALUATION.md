@@ -217,3 +217,72 @@ python -m blocking_strategies.benchmark \
 Set `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1` first: the Windows console is
 cp1252 and any strategy that prints an Indic-script key will crash the process on
 encode rather than on logic.
+
+## 7. Results
+
+Full training data. 22,123 Source-1 entities (deterministic 1% hash sample),
+76,949 true links, searched against the complete 10.3M-record Source-2/3 pool.
+Sorted by F0.5 ceiling.
+
+| Strategy | F0.5 ceiling | Pair compl. | pairs/entity | no candidates | Time | Peak RSS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `cascade` k=12, min=1 | **0.9769** | **0.9407** | 24.00 | 0.00% | 88 min | 7.5 GB |
+| `token_idf` k=20 | 0.9530 | 0.8925 | 39.97 | 0.01% | 5.2 min | 4.1 GB |
+| `cascade` k=12, min=2 | 0.9495 | 0.8832 | **9.33** | 0.52% | 87 min | 7.3 GB |
+| `token_idf` k=10 | 0.9438 | 0.8742 | 19.99 | 0.01% | **5.6 min** | 4.5 GB |
+| `token_idf` k=10, shared>=2 | 0.9426 | 0.8739 | 17.97 | 0.47% | 4.4 min | 4.4 GB |
+| `tfidf_addr` k=12, t=0.55 | 0.9400 | 0.8581 | 20.38 | 0.02% | 51 min | 6.1 GB |
+| `token_idf` k=5 | 0.9313 | 0.8460 | 10.00 | 0.01% | 5.7 min | 4.1 GB |
+| `minhash_lsh` b21xr3 | 0.8132 | 0.7082 | 19.99 | 0.00% | 8 min | 4.3 GB |
+| **`exact_baseline` (shipped)** | 0.5331 | 0.3007 | 10.67 | **21.56%** | 1.1 min | 3.9 GB |
+| `simhash_lsh` (untuned, see below) | 0.1169 | 0.0374 | 7.13 | 59.02% | 15 min | 4.3 GB |
+
+### Recommendations
+
+- **Best achievable ceiling:** `cascade` k=12, min=1 — 0.9769, +0.44 over the
+  shipped baseline, with every entity receiving candidates. Costs 88 minutes and
+  7.5 GB.
+- **Best practical choice:** `token_idf` k=10 — 0.9438 in 5.6 minutes, 15x
+  faster than the cascade for 3.3 points of ceiling. This is the one to iterate
+  the matcher against.
+- **Tightest candidate set:** `cascade` k=12, min=2 — 0.9495 at 9.33 candidates
+  per entity, strictly better than `token_idf` k=5 (0.9313 at 10.00) on both
+  axes. Requiring two independent strategies to agree is a more efficient
+  precision lever than simply lowering K on one strategy.
+
+Since F_0.5 weights precision twice as heavily as recall, the tightest set that
+preserves recall is usually worth more than the largest one.
+
+### Two conclusions that the fixture got wrong
+
+**The dev fixture is unreliable for ranked methods, in both directions.**
+`token_idf` scored 0.9721 on the fixture and 0.9438 on full data — top-K
+selection is harder against 3.17M competitors than 141k. But `minhash_lsh` went
+the *other* way, 0.4123 on the fixture and 0.8132 at full scale, because LSH
+bucket occupancy depends on pool density and a 1/25 sample starves the buckets.
+An early conclusion that "LSH is not competitive, it scores below the baseline"
+was drawn from fixture numbers and is wrong: at full scale MinHash beats the
+shipped baseline by 28 points. It still loses to `token_idf` at matched
+candidate budget, but the fixture materially misrepresented it.
+
+The fixture remains useful for exact-key methods, which transfer almost exactly
+(baseline: 0.2987 fixture vs 0.3007 full), and for cheap relative comparison
+during development. It must not be used for a final verdict.
+
+**`sparse_dot_topn` did not pay off here.** The premise was that a C++ sparse
+top-K matmul would beat a Python inverted index at 10M-record scale.
+`tfidf_addr` reaches 0.9400 in 51 minutes; `token_idf` reaches a *higher* 0.9438
+in 5.6 minutes. The matmul itself is fast, but fitting and applying a TF-IDF
+character-n-gram vectorizer over 3.17M documents per partition dominates the
+runtime, and the resulting character-n-gram similarity turns out to be a weaker
+signal than word-level rarity on 2-5 word business names. The library is not at
+fault — the representation is.
+
+### On `simhash_lsh`
+
+Its configuration is untuned: 59% of entities receive no candidates at all,
+which means the banded bit-substring buckets are far too sparse at this scale.
+The 0.1169 figure should be read as "this configuration is broken", not as a
+verdict on random-hyperplane LSH. The agent implementing it was stopped before
+it finished tuning. Given MinHash's result, a tuned SimHash would likely land in
+a similar range; it is the one clear piece of unfinished work here.

@@ -1,0 +1,60 @@
+{
+  "by_country": {
+    "India": {
+      "candidate_pairs": 146760,
+      "entities": 8806,
+      "f05_ceiling": 0.2067273167548932,
+      "pair_completeness": 0.09181818181818181,
+      "pairs_per_entity_mean": 16.66590960708608,
+      "true_links": 30800
+    },
+    "US": {
+      "candidate_pairs": 10987,
+      "entities": 13317,
+      "f05_ceiling": 0.057571510573312785,
+      "pair_completeness": 0.0011484539209950378,
+      "pairs_per_entity_mean": 0.8250356686941503,
+      "true_links": 46149
+    }
+  },
+  "candidate_pairs": 157747,
+  "entities_fully_recovered": 0.0049691815184671985,
+  "entities_with_no_candidates": 0.590245445916015,
+  "eval_entities": 22123,
+  "f05_ceiling": 0.11694257368568439,
+  "macro_recall": 0.037205312512302816,
+  "pair_completeness": 0.03744038259106681,
+  "pairs_per_entity_max": 20,
+  "pairs_per_entity_mean": 7.130452470279799,
+  "pairs_per_entity_p50": 0.0,
+  "pairs_per_entity_p95": 20.0,
+  "params": {
+    "band_collision_p": 0.00286,
+    "bands": 24,
+    "bits_per_band": 12,
+    "chunk_rows": 50000,
+    "df_sample_fraction": 0.25,
+    "k": 10,
+    "max_bucket_size": 200,
+    "max_hamming": 49,
+    "max_pairs_per_probe": 3000000,
+    "n_bits": 128,
+    "n_features": 262144,
+    "ngram_range": [
+      3,
+      4
+    ],
+    "probe_bits": 1,
+    "reduce_every": 6,
+    "score_chunk": 500000,
+    "seed": 20260925,
+    "threshold": 0.35,
+    "use_idf": true
+  },
+  "peak_rss_mb": 4279.3,
+  "recovered_links": 2881,
+  "reduction_ratio": 0.9999986720384693,
+  "seconds": 908.428,
+  "strategy": "simhash_lsh[128b,L24xk12,top10]",
+  "true_links": 76949
+}

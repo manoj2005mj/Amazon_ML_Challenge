@@ -1,0 +1,46 @@
+{
+  "by_country": {
+    "India": {
+      "candidate_pairs": 351585,
+      "entities": 8806,
+      "f05_ceiling": 0.9161699621044244,
+      "pair_completeness": 0.827012987012987,
+      "pairs_per_entity_mean": 39.92561889620713,
+      "true_links": 30800
+    },
+    "US": {
+      "candidate_pairs": 532629,
+      "entities": 13317,
+      "f05_ceiling": 0.9774114879279402,
+      "pair_completeness": 0.9362066350300114,
+      "pairs_per_entity_mean": 39.996170308628066,
+      "true_links": 46149
+    }
+  },
+  "candidate_pairs": 884214,
+  "entities_fully_recovered": 0.7319031009603899,
+  "entities_with_no_candidates": 0.00013560547846132984,
+  "eval_entities": 22123,
+  "f05_ceiling": 0.9530344650828524,
+  "macro_recall": 0.8914502130028433,
+  "pair_completeness": 0.8925002274233583,
+  "pairs_per_entity_max": 40,
+  "pairs_per_entity_mean": 39.96808751073544,
+  "pairs_per_entity_p50": 40.0,
+  "pairs_per_entity_p95": 40.0,
+  "params": {
+    "address_weight": 0.6,
+    "k": 20,
+    "max_df": 0.005,
+    "min_score": 0.0,
+    "min_shared": 1,
+    "min_token_len": 3,
+    "use_address": true
+  },
+  "peak_rss_mb": 4130.5,
+  "recovered_links": 68677,
+  "reduction_ratio": 0.9999925564215043,
+  "seconds": 313.331,
+  "strategy": "token_idf[df<=0.005,shared>=1,k=20,+addr]",
+  "true_links": 76949
+}
