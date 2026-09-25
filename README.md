@@ -1,5 +1,12 @@
 # Amazon ML Challenge 2026 dataset workspace
 
+> **New session? Read [HANDOFF.md](HANDOFF.md) first.** It is the
+> self-contained project state: the goal and scoring rules, what is done, what is
+> explicitly *not* done, the key findings, and the prioritized next steps.
+> Blocking results and methodology are in
+> [docs/BLOCKING_EVALUATION.md](docs/BLOCKING_EVALUATION.md).
+
+
 This project turns the official multi-source entity-resolution files into ordinary,
 model-ready binary pair datasets. The raw download stays unchanged in Downloads; the
 scripts create reproducible samples inside this workspace.
