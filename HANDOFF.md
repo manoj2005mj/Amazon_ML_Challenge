@@ -84,6 +84,33 @@ singletons, 99.9% of entities have <= 9 matches.
 
 ## 3. Current state — READ THIS CAREFULLY
 
+### Candidate files — DONE (2026-09-25)
+
+Both candidate files exist on the local machine (not in git — 3-4 GB each),
+produced by `token_idf_fast` (k=20 per source, max_df=0.005) via
+`python -m blocking_strategies.export_candidates`:
+
+| Split | Path (under `amazon ML resource/`) | Rows | S1 covered | Time |
+| --- | --- | ---: | ---: | ---: |
+| test | `candidates/test/candidate_pairs.tsv` | 69,157,371 | 1,731,117 / 1,732,544 | 24.5 min |
+| train | `candidates/train/candidate_pairs.tsv` | 88,200,054 | 2,206,214 / 2,206,821 | ~31 min |
+
+Columns: `s1_id cand_id source country score rank` (+ `label` on train, 1 =
+ground-truth match). Up to 20 candidates from S2 and 20 from S3 per S1 record;
+`rank` 1 = highest summed-IDF score. The same data is in `parts/*.parquet`
+(one per country x source, zstd) — much faster to load than the TSV.
+
+**Train coverage on ALL 2.2M entities: 6,824,664 of 7,638,365 true links =
+89.35%** (the 1%-sample estimate was 89.30%). 7.7% of train rows are positives.
+The ~10.7% of links not in the file are unreachable for any matcher trained on
+it — mostly cross-script pairs (finding 1).
+
+`token_idf_fast` is the same scoring model as `token_idf`, computed as a sparse
+matrix product with `sparse_dot_topn` instead of a per-record Python loop. On
+the 1% evaluation it reproduces `token_idf` k=20 exactly (884,214 pairs, F0.5
+ceiling 0.9532 vs 0.9530) in 169 s vs 313 s; on full test it is ~10x faster
+than the loop version's projected 4+ hours.
+
 ### What is DONE
 
 Blocking / candidate generation is solved and measured. On full training data
@@ -112,16 +139,11 @@ given block set. Raw JSON reports are in `runs/full/`.
 
 This is the important part. Do not assume more exists than this.
 
-1. **No block set exists on disk.** Nothing. The harness computes candidate
-   matrices, scores them, and discards them — `BlockingScorer` keeps only
-   per-entity counters by design, so memory is constant regardless of block-set
-   size. `runs/` contains **metric JSON only**, never pairs.
-   (The `blocking_strategies/block_set/` directory is the OLD exact-match
-   baseline from before this work — the 30%-recall one. Not useful.)
-2. **No export path exists.** Nothing writes `candidate_pairs.tsv` or
-   `matching_results.tsv`. This code must be written.
-3. **Nothing has ever run on the test set.** The only reference to
-   `test_source1.tsv` in the codebase is a row-count constant.
+1. Candidate files exist (above), but only from `token_idf_fast`. The cascade
+   (ceiling 0.977 vs 0.953) was not exported — too slow for the deadline.
+2. The candidate files are not in git and live only on the local machine.
+3. `test_source*` normalisation caches exist; France (259,452 test rows, no
+   training data) got candidates but nothing about them is validated.
 4. **There is no matcher.** Current leaderboard score would be 0.
 5. All benchmarks used a **1% query sample**. Statistically that is ample for
    *choosing* a strategy (standard error ~0.002 against gaps of ~0.03), but the
@@ -289,19 +311,17 @@ python -m blocking_strategies.benchmark \
 
 ## 7. What to do next, in priority order
 
-**1. Write the export path and produce a test-set candidate file. START HERE.**
-This is the only genuinely non-optional artifact and it does not exist. It needs
-a mode that streams candidate pairs to disk instead of scoring them in memory,
-run over `test/` for all 1,732,544 entities. Estimated 5-8 hours with
-`token_idf k=20` as-is. **Run it overnight** — it is the one thing a deadline
-cannot absorb.
+**1. ~~Write the export path and produce the candidate files.~~ DONE** — see
+section 3. Regenerate with:
 
-Generate at a **generous k (20), not a tight one.** You can always prune a large
-candidate set down later (by score or top-N); you cannot expand a small one
-without paying the whole run again. The optimal k depends on how precise the
-matcher turns out to be, which is not yet known.
+```bash
+python -m blocking_strategies.export_candidates --split test --data-dir <dataset>/test --out-dir <out>/test
+python -m blocking_strategies.export_candidates --split train --data-dir <dataset>/train --out-dir <out>/train
+```
 
-**2. Build the matcher.** The ceiling is 0.977 and the actual score is 0. Every
+Resumable: finished `parts/*.parquet` are skipped on a rerun.
+
+**2. Build the matcher. START HERE.** The ceiling for the exported file is 0.953 and the actual score is 0. Every
 point here is worth far more than further blocking work. Suggested features: the
 blocking scores themselves (token-IDF overlap, name cosine, address cosine),
 `rapidfuzz` ratios, and **numeric-token agreement** (house numbers, PIN codes) —
@@ -324,7 +344,7 @@ validated on them. Unhedged risk.
      the tokens you would drop first are the least discriminative.
    - `np.add.at` in `token_idf` retrieval is a known NumPy slow path;
      `np.bincount(inverse, weights=...)` computes the same thing in C.
-   - **Reframe rare-token scoring as a sparse matmul.** `score = Q @ P` where Q
+   - ~~**Reframe rare-token scoring as a sparse matmul.**~~ DONE as `token_idf_fast`. `score = Q @ P` where Q
      is queries x tokens (IDF-weighted) and P is tokens x candidates (binary) —
      which means `sparse_dot_topn` can run it with an OpenMP C++ inner loop and
      built-in top-K, replacing the per-row Python loop. This does not contradict
