@@ -1,0 +1,54 @@
+{
+  "by_country": {
+    "India": {
+      "candidate_pairs": 378907,
+      "entities": 17543,
+      "f05_ceiling": 0.9134230300515159,
+      "pair_completeness": 0.8213732661197325,
+      "pairs_per_entity_mean": 21.598757339109618,
+      "true_links": 60702
+    },
+    "US": {
+      "candidate_pairs": 522622,
+      "entities": 26699,
+      "f05_ceiling": 0.9861832005923223,
+      "pair_completeness": 0.9581134708473246,
+      "pairs_per_entity_mean": 19.57459080864452,
+      "true_links": 91724
+    }
+  },
+  "candidate_pairs": 901529,
+  "entities_fully_recovered": 0.7743721242331288,
+  "entities_with_no_candidates": 0.0018082365173364677,
+  "eval_entities": 44242,
+  "f05_ceiling": 0.957332071081962,
+  "macro_recall": 0.9026163392248515,
+  "pair_completeness": 0.9036581685539212,
+  "pairs_per_entity_max": 24,
+  "pairs_per_entity_mean": 20.377220740472854,
+  "pairs_per_entity_p50": 24.0,
+  "pairs_per_entity_p95": 24.0,
+  "params": {
+    "analyzer": "char_wb",
+    "chunk_size": 400000,
+    "fit_side": "candidates",
+    "k": 12,
+    "max_features": null,
+    "min_df": 0.0001,
+    "n_threads": 4,
+    "name_weight": 0.75,
+    "ngram_range": [
+      2,
+      3
+    ],
+    "query_chunk_size": 250000,
+    "sublinear_tf": true,
+    "threshold": 0.42
+  },
+  "peak_rss_mb": 753.0,
+  "recovered_links": 137741,
+  "reduction_ratio": 0.9999144310876699,
+  "seconds": 260.463,
+  "strategy": "tfidf_fused[n=2-3,k=12,t=0.42,w=0.75]",
+  "true_links": 152426
+}

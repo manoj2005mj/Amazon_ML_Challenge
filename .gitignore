@@ -5,3 +5,8 @@ __pycache__/
 data/prepared/*
 !data/prepared/.gitkeep
 
+
+# Derived benchmark inputs: rebuildable from the training data with
+# blocking_strategies/harness/make_fixture.py, and too large to version.
+data/dev_fixture/
+_norm_cache/

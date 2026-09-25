@@ -1,0 +1,5 @@
+[
+  ["cascade_k12",      "cascade", {"k": 12}],
+  ["cascade_k8",       "cascade", {"k": 8}],
+  ["cascade_k12_min2", "cascade", {"k": 12, "min_strategies": 2}]
+]

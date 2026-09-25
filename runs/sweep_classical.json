@@ -1,0 +1,9 @@
+[
+  ["sorted_nbhd_k5",  "sorted_neighbourhood", {"k": 5}],
+  ["sorted_nbhd_k10", "sorted_neighbourhood", {"k": 10}],
+  ["sorted_nbhd_w12_k10", "sorted_neighbourhood", {"k": 10, "window": 12}],
+  ["sorted_nbhd_min2_k10", "sorted_neighbourhood", {"k": 10, "min_passes": 2}],
+  ["token_idf_k5",   "token_idf", {"k": 5}],
+  ["token_idf_k10",  "token_idf", {"k": 10}],
+  ["token_idf_df500_k10", "token_idf", {"k": 10, "max_df": 500}]
+]

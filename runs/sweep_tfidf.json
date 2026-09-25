@@ -1,0 +1,8 @@
+[
+  ["tfidf_name_def",   "tfidf_name",  {}],
+  ["tfidf_addr_def",   "tfidf_addr",  {}],
+  ["tfidf_fused_def",  "tfidf_fused", {}],
+  ["tfidf_name_k10_t35", "tfidf_name",  {"k": 10, "threshold": 0.35}],
+  ["tfidf_fused_k10_t35","tfidf_fused", {"k": 10, "threshold": 0.35}],
+  ["tfidf_fused_k20_t30","tfidf_fused", {"k": 20, "threshold": 0.30}]
+]

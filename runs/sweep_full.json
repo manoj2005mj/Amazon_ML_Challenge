@@ -1,0 +1,7 @@
+[
+  ["full_cascade_k12_min2", "cascade", {"k": 12, "min_strategies": 2}],
+  ["full_token_idf_k10",    "token_idf", {"k": 10, "max_df": 0.005}],
+  ["full_cascade_k12_min1", "cascade", {"k": 12, "min_strategies": 1}],
+  ["full_tfidf_addr",       "tfidf_addr", {"k": 12, "threshold": 0.55}],
+  ["full_minhash_lsh",      "minhash_lsh", {"k": 10}]
+]
