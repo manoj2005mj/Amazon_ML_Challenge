@@ -130,22 +130,37 @@ def main() -> int:
         tsv = args.out_dir / "candidate_pairs.tsv"
         tmp = tsv.with_suffix(".partial")
         t0 = time.perf_counter()
-        writer = None
         total = 0
-        for part in written:
-            table = pq.read_table(part)
-            if writer is None:
-                writer = pacsv.CSVWriter(
-                    str(tmp),
-                    table.schema,
-                    write_options=pacsv.WriteOptions(delimiter="\t", quoting_style="none"),
-                )
-            writer.write_table(table)
-            total += table.num_rows
-        if writer is not None:
-            writer.close()
-            tmp.replace(tsv)
-            print(f"[tsv ] {tsv} : {total:,} rows in {time.perf_counter() - t0:.0f}s")
+        # Header written by hand: pyarrow quotes header names even with
+        # quoting_style="none".
+        with open(tmp, "wb") as sink:
+            writer = None
+            for part in written:
+                table = pq.read_table(part)
+                if writer is None:
+                    sink.write(("\t".join(table.column_names) + "\n").encode())
+                    writer = pacsv.CSVWriter(
+                        sink,
+                        table.schema,
+                        write_options=pacsv.WriteOptions(
+                            include_header=False, delimiter="\t", quoting_style="none"
+                        ),
+                    )
+                writer.write_table(table)
+                total += table.num_rows
+            if writer is not None:
+                writer.close()
+        # Windows: antivirus or the indexer can hold a just-closed 3 GB file
+        # for a moment, which makes the rename fail with WinError 32.
+        for attempt in range(30):
+            try:
+                tmp.replace(tsv)
+                break
+            except PermissionError:
+                if attempt == 29:
+                    raise
+                time.sleep(2)
+        print(f"[tsv ] {tsv} : {total:,} rows in {time.perf_counter() - t0:.0f}s")
 
     print(f"done in {time.perf_counter() - started:.0f}s")
     return 0
