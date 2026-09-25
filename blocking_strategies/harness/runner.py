@@ -62,6 +62,7 @@ REGISTRY = {
     "tfidf_fused": "blocking_strategies.strategies.tfidf_topn:TfidfFusedTopN",
     "minhash_lsh": "blocking_strategies.strategies.minhash_lsh:MinHashBandedLSH",
     "token_idf": "blocking_strategies.strategies.token_idf:RareTokenBlocking",
+    "token_idf_fast": "blocking_strategies.strategies.token_idf_fast:RareTokenMatmul",
     "sorted_neighbourhood": (
         "blocking_strategies.strategies.sorted_neighbourhood:SortedNeighbourhood"
     ),
