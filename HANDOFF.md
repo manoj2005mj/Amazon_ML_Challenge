@@ -1,10 +1,10 @@
 # Project handoff — Amazon ML Challenge 2026, business entity resolution
 
 Self-contained state of the project. Read this first in a new session; it assumes no
-prior context. Last updated **2026-09-26 15:00**. Local checkout: branch
-`sparse-dot-topn-blocking` (the latest branch; `main` only holds the exact-key baseline).
-`matching/`, `cleaning/`, `docs/EDA_REPORT.md`, `strategies/union_passes.py` and
-`runs/clean/` are **untracked** local work — commit them.
+prior context. Last updated **2026-09-26 18:10**. Local checkout: branch
+`v2-pipeline` (all v2 code committed and pushed, commit c4e9f80, branched from
+`sparse-dot-topn-blocking`; `main` only holds the exact-key baseline). The checkout is
+this `src/` folder itself (`.git` lives here). Full session record: `docs/SESSION_REPORT.md`.
 
 ---
 
