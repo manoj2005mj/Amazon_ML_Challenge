@@ -37,7 +37,9 @@ __all__ = [
 
 _NON_ALNUM_ASCII = re.compile(r"[^0-9a-z]+")
 _NON_ALNUM_SPACE = re.compile(r"[^0-9a-z]+")
-_RUNS = re.compile(r"(.)\1+")
+# Letters only: collapsing digit runs turned "1100" into "10" and "0029" into
+# "029", which made distinct house numbers and postcodes collide (EDA 2026-09-26).
+_RUNS = re.compile(r"([a-z])\1+")
 _WS = re.compile(r"\s+")
 
 # Legal-form tokens carry almost no discriminative signal but dominate n-gram

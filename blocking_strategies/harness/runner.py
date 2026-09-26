@@ -68,6 +68,7 @@ REGISTRY = {
     ),
     "simhash_lsh": "blocking_strategies.strategies.simhash_lsh:SimHashLSH",
     "cascade": "blocking_strategies.strategies.cascade:CascadeUnion",
+    "union_passes": "blocking_strategies.strategies.union_passes:UnionPasses",
 }
 
 

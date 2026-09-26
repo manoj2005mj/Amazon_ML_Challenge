@@ -1,0 +1,62 @@
+{
+  "by_country": {
+    "India": {
+      "candidate_pairs": 527681,
+      "entities": 8806,
+      "f05_ceiling": 0.9772575701954441,
+      "pair_completeness": 0.9351948051948052,
+      "pairs_per_entity_mean": 59.92289348171701,
+      "true_links": 30800
+    },
+    "US": {
+      "candidate_pairs": 799020,
+      "entities": 13317,
+      "f05_ceiling": 0.9919022466171948,
+      "pair_completeness": 0.9759041366010097,
+      "pairs_per_entity_mean": 60.0,
+      "true_links": 46149
+    }
+  },
+  "candidate_pairs": 1326701,
+  "entities_fully_recovered": 0.874384824884132,
+  "entities_with_no_candidates": 0.0,
+  "eval_entities": 22123,
+  "f05_ceiling": 0.9860729729847788,
+  "macro_recall": 0.9588637358203511,
+  "pair_completeness": 0.959609611560904,
+  "pairs_per_entity_max": 60,
+  "pairs_per_entity_mean": 59.96930796004158,
+  "pairs_per_entity_p50": 60.0,
+  "pairs_per_entity_p95": 60.0,
+  "params": {
+    "address_weight": 0.6,
+    "cap": 30,
+    "k_addr": 15,
+    "k_base": 30,
+    "k_bigram": 10,
+    "k_name": 10,
+    "max_bucket": 20,
+    "max_df": 0.005,
+    "min_len": 2,
+    "passes": [
+      "base",
+      "addr",
+      "name",
+      "exact"
+    ],
+    "rrf_k": 20,
+    "weights": {
+      "addr": 0.8,
+      "base": 1.0,
+      "bigram": 0.7,
+      "exact": 1.0,
+      "name": 0.6
+    }
+  },
+  "peak_rss_mb": 4594.1,
+  "recovered_links": 73841,
+  "reduction_ratio": 0.9999888314333025,
+  "seconds": 218.831,
+  "strategy": "union_passes[base+addr+name+exact,cap=30]",
+  "true_links": 76949
+}

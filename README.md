@@ -1,91 +1,94 @@
-# Amazon ML Challenge 2026 dataset workspace
+> Repository root corresponds to `code/business_entity_resolution/src/` of the submission layout described below, so the `src/` prefix in the paths is dropped here. Earlier dataset-workspace notes: [docs/DATASET_WORKSPACE.md](docs/DATASET_WORKSPACE.md). Project state: [HANDOFF.md](HANDOFF.md). Full session record: [docs/SESSION_REPORT.md](docs/SESSION_REPORT.md).
 
-> **New session? Read [HANDOFF.md](HANDOFF.md) first.** It is the
-> self-contained project state: the goal and scoring rules, what is done, what is
-> explicitly *not* done, the key findings, and the prioritized next steps.
-> Blocking results and methodology are in
-> [docs/BLOCKING_EVALUATION.md](docs/BLOCKING_EVALUATION.md).
+# Business Entity Resolution — reproduction guide
 
+End-to-end pipeline: **raw TSVs → normalization → blocking (candidates) →
+pair features → LightGBM matcher → F0.5 decision rule → submission files.**
 
-This project turns the official multi-source entity-resolution files into ordinary,
-model-ready binary pair datasets. The raw download stays unchanged in Downloads; the
-scripts create reproducible samples inside this workspace.
+Everything runs on a 16 GB Windows laptop, CPU only. No external data, APIs or
+geocoding are used. Transliteration uses `Unidecode`'s built-in character table.
 
-## What is created
+## Layout
 
-- `train_pairs.tsv`: labeled pairs for fitting a model.
-- `validation_pairs.tsv`: a labeled 10% Source-1 holdout for local accuracy and F0.5 testing.
-- `metadata.json`: the exact configuration, row counts, label meaning, and split rules.
-
-Each pair file is tab-separated and contains raw names and addresses for both sides,
-country, candidate source, and a binary `label`. It can be loaded by pandas, Polars,
-Spark, scikit-learn, XGBoost, PyTorch, TensorFlow, or a custom pipeline.
-
-## Build a quick sample
-
-```powershell
-python src/prepare_dataset.py --config config/quickstart.json
+```
+src/
+  blocking_strategies/   candidate generation (token-IDF blocker), normalization
+    harness/textnorm.py  transliteration + squeeze + legal/abbreviation handling
+    export_candidates.py writes candidates/<split>/parts/<country>_<source>.parquet
+  matching/              the matcher
+    common.py            paths, id codec, address canonicalization, metric
+    prep_entities.py     per-record attributes (once per split)
+    cand_stats.py        candidate-side competition stats over the full candidate file
+    sample.py            10% Source-1 sample for experiments
+    features.py          74 pair features (sample or full split)
+    train_eval.py        model comparison on the sample (LogReg vs LightGBM)
+    train_full.py        final model: full train split, easy-negative downsampling
+    predict.py           score test pairs, apply the rule, write output/*.tsv
+  cleaning/              data cleaning stage (raw TSVs -> cleaned TSVs + sidecars)
+    rules.py             static tables: legal forms, honorifics, street/state/region maps
+    clean.py             the cleaner + CLI (parallel, streaming)
+    learn_dictionary.py  Indic-transliteration / abbreviation dictionaries learned from
+                         training ground truth only; writes cleaning/dictionary.json
+    segment.py           website-name segmentation ("tristateguild.com" -> "tri state guild")
+  docs/EDA_REPORT.md     the EDA that motivated every cleaning rule (charts in docs/charts/)
 ```
 
-The quick-start config selects approximately 1% of Source-1 entities and reserves exactly 10% of those
-entities for validation. It still scans the raw Source-2/3 files once so that every
-positive record can be found.
+## Setup
 
-## Build the default 10% sample
-
-```powershell
-python src/prepare_dataset.py --config config/dataset.json
+```bash
+pip install -r requirements.txt
+export PYTHONIOENCODING=utf-8 PYTHONUTF8=1       # Windows console is cp1252
+export ER_ROOT="<folder containing student_resource/>"   # default: the author's path
+cd src
 ```
 
-Change `data_fraction` in `config/dataset.json` to any value above 0 and at most 1.
-For example, use `0.02` for 2%, `0.25` for 25%, or `1.0` for the full training corpus.
-Keep `validation_fraction` at `0.10` to preserve the requested 10% labeled holdout.
-Hash sampling makes `data_fraction` reproducible and statistically close to the requested
-percentage; the validation split is assigned as an exact fraction of the selected entities.
+`ER_ROOT` must contain `student_resource/dataset/{train,test}/`. Intermediate
+files go to `$ER_ROOT/work/match/` (override with `ER_WORK`); candidates to
+`$ER_ROOT/candidates/`.
 
-You can also override values without editing the file:
+## Run
 
-```powershell
-python src/prepare_dataset.py --config config/dataset.json --data-fraction 0.05 --output-dir data/prepared/five-percent
+```bash
+# 0. Cleaning: cleaned copies of the six source files (same schema, same ids) plus a
+#    sidecar parquet per file with what was stripped (legal form, honorific, alias,
+#    "(ID: n)" tag, unit, state, French region). Ground truth is copied unchanged.
+#    The dictionary is learned from TRAIN ground truth only and applied to both splits.
+python -m cleaning.learn_dictionary --data-dir "$ER_ROOT/student_resource/dataset" --workers 8
+python -m cleaning.clean --split train --in-dir "$ER_ROOT/student_resource/dataset/train" --out-dir "$ER_ROOT/student_resource/dataset_clean/train" --workers 10
+python -m cleaning.clean --split test  --in-dir "$ER_ROOT/student_resource/dataset/test"  --out-dir "$ER_ROOT/student_resource/dataset_clean/test"  --workers 10
+#    Every later step reads the cleaned folder: pass it as --data-dir below and set
+#    ER_DATASET="$ER_ROOT/student_resource/dataset_clean" for the matching steps.
+
+# 1. Blocking: top-20 candidates per Source-1 record from each of S2 and S3
+python -m blocking_strategies.export_candidates --split train --data-dir "$ER_ROOT/student_resource/dataset/train" --out-dir "$ER_ROOT/candidates/train"
+python -m blocking_strategies.export_candidates --split test  --data-dir "$ER_ROOT/student_resource/dataset/test"  --out-dir "$ER_ROOT/candidates/test"
+
+# 2. Per-record attributes and candidate competition stats
+python -m matching.prep_entities --split train
+python -m matching.prep_entities --split test
+python -m matching.cand_stats --split train
+python -m matching.cand_stats --split test
+
+# 3. Validation sample (10% of Source-1 entities; 20% of those held out)
+python -m matching.sample --fraction 0.10 --name sample10
+
+# 4. Pair features for every train and test pair
+python -m matching.features --split train --full --shards 4 --workers 8
+python -m matching.features --split test  --full --shards 2 --workers 8
+
+# 5. Final model (validation entities are never trained on)
+python -m matching.train_full --features "full_train/features_*.parquet" --tag full
+
+# 6. Score test and write output/matching_results.tsv + output/candidate_pairs.tsv
+python -m matching.predict --model "$ER_ROOT/work/match/full/model.txt" --rule "$(cat $ER_ROOT/work/match/full/rule.json)" --tag full
+
+# 7. Validate the submission format
+cd "$ER_ROOT/student_resource"
+python utils/validate_submission.py --matching ../output/matching_results.tsv --candidate ../output/candidate_pairs.tsv --test-dir dataset/test
 ```
 
-## Split design
+Optional experiments on the sample: `python -m matching.features --sample sample10 --workers 6`
+then `python -m matching.train_eval --sample sample10`.
 
-The split is made by `source1_entity_id`, not by individual pair. Consequently, a
-business and all its matches/non-matches stay entirely in train or validation. The
-official unlabeled competition test set is never used for local validation.
-
-## Evaluate model scores
-
-Write a tab-separated prediction file with these columns:
-
-```text
-source1_entity_id    candidate_entity_id    score
-```
-
-Then run:
-
-```powershell
-python src/evaluate_predictions.py --validation data/prepared/quickstart/validation_pairs.tsv --predictions predictions.tsv --threshold 0.5
-```
-
-The evaluator reports ordinary pair accuracy and the challenge's entity-level macro
-F0.5. Prefer macro F0.5 when selecting a final threshold.
-
-## Important modeling note
-
-The generated random negatives make hypothesis tests fast, but they are not a final
-blocking strategy. After a baseline works, add hard negatives with similar names or
-addresses and measure candidate recall before training the competition model.
-
-See `docs/DATASET_OVERVIEW.md` for the source profile and interpretation.
-
-## Build the first candidate block set
-
-The deterministic country/name/address baseline and its generated compressed
-candidate shards live in `blocking_strategies/`. It uses exact normalized-name
-and normalized-address indexes within country, unions both candidate streams,
-and records the rule that produced each pair.
-
-See `blocking_strategies/README.md` for the algorithm, reproduction command,
-full-data counts, verification command, and recall limitation.
+Approximate run times on the reference laptop: blocking ~55 min, prep ~15 min,
+full features ~80 min, training ~40 min, prediction ~10 min.

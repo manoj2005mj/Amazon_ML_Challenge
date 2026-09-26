@@ -1,0 +1,12 @@
+# Python 3.12.3 (Windows 11, 16 GB RAM). CPU only; no GPU needed.
+numpy==1.26.4
+pandas==2.3.3
+pyarrow==22.0.0
+scipy==1.14.0
+scikit-learn==1.5.1
+lightgbm==4.6.0
+rapidfuzz==3.10.0
+Unidecode==1.4.0
+sparse_dot_topn==1.2.0
+psutil==6.0.0
+datasketch==2.0.0

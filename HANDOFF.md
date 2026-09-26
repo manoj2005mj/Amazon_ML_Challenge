@@ -1,360 +1,203 @@
-# Project handoff
+# Project handoff — Amazon ML Challenge 2026, business entity resolution
 
-Self-contained state of this project. Read this first in a new session; it
-assumes no prior context.
-
-Last updated: 2026-09-25. Branch: `sparse-dot-topn-blocking`.
-
----
-
-## 1. What we are trying to achieve
-
-**Amazon ML Challenge 2026 — Business Entity Resolution.**
-
-Given business records from three independent, noisy sources, decide which
-records refer to the same real-world business. Source 1 is the deduplicated
-reference; for every Source-1 record we must find all matching Source-2 and
-Source-3 records. A Source-1 entity may match zero, one, or many.
-
-**Scoring — this shapes every decision:**
-
-```
-F_0.5 = (1.25 x P x R) / (0.25 x P + R)     computed PER Source-1 entity,
-                                            then macro-averaged over ALL of them
-```
-
-- Precision is weighted **2x** over recall. False merges hurt more than misses.
-- **Singletons count.** An entity with no true matches scores **1.0** if you
-  correctly predict an empty list, and **0.0** if you predict anything. 5.58% of
-  entities are singletons, so this is ~5.6 points of free score — or free loss.
-- Because it is a *macro* average, an entity you completely miss costs as much
-  as an entity with nine matches. Per-entity coverage matters more than total
-  link coverage.
-
-**Deliverables (both go in `output/` of the submission zip):**
-
-| File | Purpose |
-| --- | --- |
-| `matching_results.tsv` | Final matches. **The only file scored on the leaderboard.** |
-| `candidate_pairs.tsv` | The blocking output — the exact set fed to the model for inference. Not scored, but audited. |
-
-Format: tab-separated, one row per Source-1 entity, `matched_entity_ids` is a
-comma-separated list (empty for singletons). Every test Source-1 entity must
-appear exactly once. Validate with `student_resource/utils/validate_submission.py`
-before submitting.
-
-**Hard constraints:**
-
-- **No external data lookup.** No entity-resolution APIs, no geocoding, no
-  business registries, no internet augmentation. Disqualification if found.
-  Static library tables (e.g. `unidecode`'s character map) are fine — they are
-  not a data lookup.
-- Final model must be MIT/Apache-2.0 licensed and <= 8B parameters.
+Self-contained state of the project. Read this first in a new session; it assumes no
+prior context. Last updated **2026-09-26 15:00**. Local checkout: branch
+`sparse-dot-topn-blocking` (the latest branch; `main` only holds the exact-key baseline).
+`matching/`, `cleaning/`, `docs/EDA_REPORT.md`, `strategies/union_passes.py` and
+`runs/clean/` are **untracked** local work — commit them.
 
 ---
 
-## 2. The data
+## 1. Task, metric, deliverables
 
-Location: `C:\Users\manoj\Downloads\amazon ML resource\student_resource\dataset\`
+Three noisy sources of business records (name, address, country). Source 1 is the
+deduplicated reference; for every Source-1 record predict the set of matching Source-2/3
+records (zero, one or many). Countries: US and India in train; **France only in test**.
 
-| File | Rows | Countries |
+Metric: macro **F0.5 per Source-1 entity** (precision weighted 2x; a correct empty
+prediction on a singleton scores 1.0, any prediction on a singleton scores 0.0).
+
+Deliverables (zip): `output/matching_results.tsv` (scored), `output/candidate_pairs.tsv`
+(audited), `code/business_entity_resolution/` (this code + README + requirements),
+filled `Documentation_template.md`. Rules: no external data/APIs; model MIT/Apache, <= 8B.
+Validate with `student_resource/utils/validate_submission.py` before uploading.
+
+## 2. Data (all under `C:\Users\manoj\Downloads\amazon ML resource\student_resource\dataset`)
+
+| file | rows | notes |
 | --- | ---: | --- |
-| `train/train_source1.tsv` | 2,206,821 | US 1.32M / India 0.88M |
-| `train/train_source2.tsv` | 5,034,616 | US 3.02M / India 2.02M |
-| `train/train_source3.tsv` | 5,285,603 | US 3.17M / India 2.12M |
-| `train/train_ground_truth.tsv` | 2,206,821 | — |
-| `test/test_source1.tsv` | **1,732,544** | US 0.66M / India 0.81M / **France 0.26M** |
-| `test/test_source2.tsv` | ~5M | |
-| `test/test_source3.tsv` | ~5M | |
+| train S1 / S2 / S3 | 2,206,821 / 5,034,616 / 5,285,603 | US 60%, India 40% |
+| train_ground_truth | 7,638,365 links | mean 3.46 matches/entity, 5.58% singletons, <=5 from S2, <=6 from S3 |
+| test S1 / S2 / S3 | 1,732,544 / 4,887,273 / 5,082,316 | US 663k, India 810k, **France 259k** |
 
-**Ground truth:** 7,638,365 links, mean 3.46 matches per entity, 5.58%
-singletons, 99.9% of entities have <= 9 matches.
+Facts that shape decisions (full EDA: `docs/EDA_REPORT.md`, charts in `docs/charts/`):
+- Ground truth is clean: no cross-country links, each S2/S3 record links to <= 1 S1
+  entity (so a one-owner rule is exact), no leakage in ids/row order, 0 train/test overlap.
+- US and India have identical match distributions to 3 decimals: one generator. France
+  was presumably generated the same way (singleton rate ~5.6%).
+- **Test pools are 23% denser than train** (5.75 S2+S3 records per S1 vs 4.67). Unknown
+  whether that means more matches or more orphans; only the leaderboard can tell.
+- Noise: Source 2 writes US addresses in CAPS with abbreviated street types and drops
+  unit numbers; S3 spells US states out but abbreviates Indian ones; 22-24% of Indian
+  S2/S3 addresses and 13-24% of names are in nine Indic scripts; injected honorifics
+  (Mr/Dr/Smt/Shri/Sri/M/s at 1.3% each), "(ID: n)" tags, "X formerly/dba/aka Y" aliases,
+  dotted legal forms, leading-zero house numbers, placeholder components ("null", "n/a").
+- France: 3 regions, ~18 cities; S1 ends with the region, S2/S3 with the department or
+  city; 36% abbreviated street types; no postcodes; generic names (association, club).
 
-**Quirks that matter:**
-
-- Matches **never cross country**. Partitioning by country is both correct and
-  what keeps memory tractable (largest partition 3.17M instead of 10.3M).
-- **Test contains France (259,452 entities) with zero French training data.**
-- Source 1 is **100% ASCII**. Sources 2/3 are **11-15% non-Latin** — and not just
-  Devanagari: Odia and Telugu appear too.
-- **13.92% of all ground-truth links join an ASCII Source-1 name to a
-  non-ASCII candidate name.**
-
----
-
-## 3. Current state — READ THIS CAREFULLY
-
-### Candidate files — DONE (2026-09-25)
-
-Both candidate files exist on the local machine (not in git — 3-4 GB each),
-produced by `token_idf_fast` (k=20 per source, max_df=0.005) via
-`python -m blocking_strategies.export_candidates`:
-
-| Split | Path (under `amazon ML resource/`) | Rows | S1 covered | Time |
-| --- | --- | ---: | ---: | ---: |
-| test | `candidates/test/candidate_pairs.tsv` | 69,157,371 | 1,731,117 / 1,732,544 | 24.5 min |
-| train | `candidates/train/candidate_pairs.tsv` | 88,200,054 | 2,206,214 / 2,206,821 | ~31 min |
-
-Columns: `s1_id cand_id source country score rank` (+ `label` on train, 1 =
-ground-truth match). Up to 20 candidates from S2 and 20 from S3 per S1 record;
-`rank` 1 = highest summed-IDF score. The same data is in `parts/*.parquet`
-(one per country x source, zstd) — much faster to load than the TSV.
-
-**Train coverage on ALL 2.2M entities: 6,824,664 of 7,638,365 true links =
-89.35%** (the 1%-sample estimate was 89.30%). 7.7% of train rows are positives.
-The ~10.7% of links not in the file are unreachable for any matcher trained on
-it — mostly cross-script pairs (finding 1).
-
-`token_idf_fast` is the same scoring model as `token_idf`, computed as a sparse
-matrix product with `sparse_dot_topn` instead of a per-record Python loop. On
-the 1% evaluation it reproduces `token_idf` k=20 exactly (884,214 pairs, F0.5
-ceiling 0.9532 vs 0.9530) in 169 s vs 313 s; on full test it is ~10x faster
-than the loop version's projected 4+ hours.
-
-### What is DONE
-
-Blocking / candidate generation is solved and measured. On full training data
-(22,123-entity sample, searched against the complete 10.3M candidate pool):
-
-| Strategy | F0.5 ceiling | Pair compl. | pairs/entity | no cands | Time | Peak RSS |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `cascade` k=12 min=1 | **0.9769** | 0.9407 | 24.0 | 0.00% | 88 min | 7.5 GB |
-| `token_idf` k=20 | 0.9530 | 0.8925 | 40.0 | 0.01% | 5.2 min | 4.1 GB |
-| `cascade` k=12 min=2 | 0.9495 | 0.8832 | 9.33 | 0.52% | 87 min | 7.3 GB |
-| **`token_idf` k=10** | 0.9438 | 0.8742 | 20.0 | 0.01% | **5.6 min** | 4.5 GB |
-| `token_idf` k=10 shared>=2 | 0.9426 | 0.8739 | 18.0 | 0.47% | 4.4 min | 4.4 GB |
-| `tfidf_addr` k=12 | 0.9400 | 0.8581 | 20.4 | 0.02% | 51 min | 6.1 GB |
-| `token_idf` k=5 | 0.9313 | 0.8460 | 10.0 | 0.01% | 5.7 min | 4.1 GB |
-| `minhash_lsh` | 0.8132 | 0.7082 | 20.0 | 0.00% | 8 min | 4.3 GB |
-| **shipped baseline** | 0.5331 | 0.3007 | 10.7 | **21.56%** | 1.1 min | 3.9 GB |
-| `simhash_lsh` (untuned) | 0.1169 | 0.0374 | 7.1 | 59.02% | 15 min | 4.3 GB |
-
-"F0.5 ceiling" = the macro F0.5 this candidate set would achieve **if the
-matcher were perfect**. It is a hard upper bound on the leaderboard score for a
-given block set. Raw JSON reports are in `runs/full/`.
-
-**Recall went 30% -> 94%. Entities receiving zero candidates went 21.6% -> 0%.**
-
-### What is NOT done
-
-This is the important part. Do not assume more exists than this.
-
-1. Candidate files exist (above), but only from `token_idf_fast`. The cascade
-   (ceiling 0.977 vs 0.953) was not exported — too slow for the deadline.
-2. The candidate files are not in git and live only on the local machine.
-3. `test_source*` normalisation caches exist; France (259,452 test rows, no
-   training data) got candidates but nothing about them is validated.
-4. **There is no matcher.** Current leaderboard score would be 0.
-5. All benchmarks used a **1% query sample**. Statistically that is ample for
-   *choosing* a strategy (standard error ~0.002 against gaps of ~0.03), but the
-   submission requires **all 1,732,544 test entities**.
-6. `simhash_lsh` is untuned — 59% of entities get no candidates. Its 0.1169 is a
-   broken configuration, not a verdict.
-
----
-
-## 4. Key findings (the intuitions worth keeping)
-
-**1. The bottleneck was normalization, not the algorithm.**
-The baseline key is `casefold()` then delete everything outside `[a-z0-9]`. That
-turns every Indic-script name into an **empty string**: 9.05% of Source-2 and
-4.61% of Source-3 records had no name key at all and could never be retrieved by
-name. Combined with the 13.92% cross-script links, this alone explains most of
-the baseline's 21.6% zero-candidate rate.
-
-The fix (`harness/textnorm.py`): transliterate to ASCII, then collapse repeated
-characters, because transliteration lengthens vowels and doubles consonants.
+## 3. Pipeline and current state (everything below exists on disk)
 
 ```
-राम मार्केटिंग प्राइवेट लिमिटेड
-  -> unidecode        raam maarkettiNg praaivett limittedd
-  -> collapse runs    ram marketing praivet limited
-  -> strip legal      ram marketing
+raw TSVs
+  -> cleaning/            student_resource/dataset_clean/{train,test}/*.tsv + *.sidecar.parquet
+  -> blocking             candidates_v2/{test,train}/parts/<Country>_<S2|S3>.parquet
+  -> matching             work/match_v2/{entities,cand_stats,idf,sample10,full_train,full_test,full}
+  -> output_v2/           matching_results.tsv + candidate_pairs.tsv (validator PASS)
 ```
 
-`praivet` vs `private` is now within character-n-gram reach.
+Environment variables that select the v2 world (set them for every matching command):
+```
+ER_ROOT="C:/Users/manoj/Downloads/amazon ML resource"
+ER_DATASET="$ER_ROOT/student_resource/dataset_clean"
+ER_CANDIDATES="$ER_ROOT/candidates_v2"
+ER_WORK="$ER_ROOT/work/match_v2"
+PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+```
 
-**2. The address field carries the recall, not the name.** Measured ablation:
+### 3.1 Cleaning stage — DONE (24.2M rows, 0 errors, ~25 min)
+`cleaning/rules.py` (tables), `cleaning/clean.py` (engine + CLI, 10 workers),
+`cleaning/learn_dictionary.py` (dictionary learned from TRAIN ground truth only:
+508 Indic name-token maps, 26 address abbreviations, French city->region),
+`cleaning/dictionary.json`, `cleaning/segment.py` (website names -> words).
+Output keeps schema and ids; sidecar holds legal form, honorific, alias, id tag, unit,
+state, region, script flags. Reviewed adversarially; fixes applied (possessives, #-units,
+leading zeros, alias forms, US state order, Indic legal spellings).
+Effect on blocking (1% train sample, same blocker): pair completeness 0.8930 -> 0.9165.
+Normaliser fix: `blocking_strategies/harness/textnorm.py` `_RUNS` collapses letters only
+(digits were squeezed: "1100" -> "10"). Editing textnorm invalidates every `_norm_cache`.
 
-| Fields | cross-script recall | same-script recall |
-| --- | ---: | ---: |
-| name + address | 0.8494 | 0.9449 |
-| name only | 0.3764 | 0.6697 |
+### 3.2 Blocking — DONE, exported (`candidates_v2/`)
+`strategies/union_passes.py` (registry key `union_passes`): five passes on the cleaned
+keys — base (name+address rare tokens, k=30), address-only (k=15), name-only (k=10),
+adjacent-token bigrams (name bigrams + numeric address bigrams, k=10), exact keys
+(name|last-address-token, whole address) — fused by reciprocal rank, cap 30 per source,
+rescored with summed-IDF scores. Measured on the 1% train sample (`runs/clean/*.json`):
 
-Addresses carry house numbers, plot numbers and PIN codes — high entropy.
-Business names are 2-5 generic words. Crucially, records with Indic-script
-*names* usually still have **ASCII addresses**, so the address is the bridge
-across the script gap. Any feature set that underweights the address is wrong.
+| run | pair completeness | F0.5 ceiling | pairs/entity |
+| --- | ---: | ---: | ---: |
+| old blocker, raw data | 0.8930 | 0.9530 | 40 |
+| old blocker, cleaned data | 0.9165 | 0.9619 | 40 |
+| union_passes (shipped config) | **0.9695** (India 0.954, US 0.980) | **0.9897** | 60 |
+| union_passes without bigrams | 0.9596 | 0.9861 | 60 |
+| union_passes cap 40 | 0.9724 | 0.9908 | 80 |
 
-**3. Word-level rare tokens beat character n-grams — a vocabulary effect.**
-Word vocabulary is in the millions with a Zipfian tail, so filtering to rare
-tokens leaves very short posting lists. The char 2-3-gram vocabulary is bounded
-at ~50,000, so with 3.17M documents *every* posting list averages ~4,900 entries
-and there is no sparse tail to select. Small vocabulary = uniformly dense
-postings. This is a property of the representation, not the engine.
+Full export (`work/export_v2.log`): test 103.9M pairs, 60/entity, only 3-4 French
+entities without candidates (was 834); train exported for a **50% hash sample of S1**
+(`--s1-fraction 0.5`, 66.2M labelled pairs, recall 0.970). Old export kept in
+`candidates/` (matcher v1) — that folder is locked by another process; do not move it.
+Audit of the misses that motivated the passes: `scratchpad recall_audit_out.json`
+(84% of missed links were outranked true matches, 16% shared only common tokens).
 
-**4. Requiring agreement beats lowering K.** `cascade min=2` (two independent
-strategies must propose the pair) reaches 0.9495 at 9.33 candidates/entity,
-strictly better than `token_idf k=5` at 0.9313/10.0 on both axes.
+**Known defect, fixed in code AFTER the export:** the export rescored every pair with
+the base index only, so ~10% of pairs (found by the other passes) carry a near-zero
+score; the code now exports the max of all pass scores and breaks cap ties on it.
+`candidates_v2/` predates this fix — re-export before the next training run
+(~55 min per split).
 
-**5. Data structures mattered as much as algorithms.** The first `token_idf`
-index used `dict[str, list[int]]` over 3M records: 7.7 GB, swapped, heading for
-hours per run. Flat NumPy arrays in CSR layout: 4.5 GB, 2x faster, identical
-output.
+### 3.3 Matcher — v2 DONE, v3 retraining
+Same 74-feature LightGBM (`matching/features.py`), `prep_entities` now takes legal /
+script / web flags from the cleaning sidecar, plus the France name/address rules in
+`matching/france.py` (added by a parallel session). Trained on the 50% export
+(25.5M rows: 3.59M positives, 17.6M hard negatives, 4.3M easy negatives x10 weight).
 
-### Two conclusions that were WRONG and got corrected
+- **v2** (`work/match_v2/full/model.txt`, rule `expected_f miss 0.15 gamma 2.0 + exclusive`):
+  validation F0.5 **0.9755** (India 0.970, US 0.979) on the 22,046 validation entities
+  that have candidates; candidate ceiling on them 0.9899. (`train_full` printed 0.514
+  because half of sample10's validation entities were outside the 50% export — the
+  sampler now restricts itself to exported entities; `sample10/s1.parquet` was fixed on
+  disk, original in `s1_all.parquet`.)
+- **v3** (`work/match_v2/full_v3`, log `work/train_v3.log`): rounds 4000, lr 0.05,
+  feature_fraction 0.6, launched 14:20. Ship only if its validation F0.5 beats 0.9755;
+  then `predict --model .../full_v3/model.txt --rule "$(cat .../full_v3/rule.json)"`
+  (~1 h for 104M pairs) into `output_v3/`.
 
-- **"LSH is not competitive."** Drawn from dev-fixture numbers. MinHash goes
-  0.4123 (fixture) -> **0.8132** (full data), because LSH bucket occupancy
-  depends on pool density and a 1/25 sample starves the buckets. It beats the
-  shipped baseline by 28 points. It still loses to `token_idf`, but the fixture
-  badly misrepresented it.
-- **"`sparse_dot_topn` will win on speed."** It lost 9x. `tfidf_addr` reaches
-  0.9400 in 51 min; `token_idf` reaches a higher 0.9438 in 5.6 min. The matmul
-  is fast; TF-IDF vectorization over 3.17M documents per partition dominates,
-  and see finding 3 for why the representation is weaker.
+### 3.4 Submissions
+| file | status | content |
+| --- | --- | --- |
+| `output/` | uploaded, **leaderboard 0.902** | v1: old blocker + old matcher (val 0.940; France implied ~0.73) |
+| `output_v2/matching_results.tsv` | validator PASS, not yet uploaded | v2: 5.4% empty, 3.33 matches/entity; France 3.3% empty (was 16.6%), 3.69/entity |
+| `output_v2_probes/matching_results_france_empty.tsv` | validator PASS | v2 with all French rows empty: main − probe = 0.15 x (F_France − France singleton rate) |
 
-**Therefore: the dev fixture is unreliable for ranked/top-K methods in BOTH
-directions.** It transfers almost exactly for exact-key methods (baseline 0.2987
-fixture vs 0.3007 full). Use it for iteration, never for a verdict.
-
----
+## 4. Open issues and risks (ranked)
+1. France may now over-predict (3.3% empty vs ~5.6% expected singletons; 3.69 matches per
+   entity, more than US/India). Decide with the probe above. If over-predicting, raise
+   the French decision threshold (probabilities are bimodal, so `gamma` alone barely
+   moves it: gamma 4 -> 3.9% empty) or train a France model without competition
+   features (`cand_*`) chosen by US->India transfer.
+2. The 50% train export thins `cand_stats` competition counts relative to test. Next
+   training run: export train at 100% (~110 min) or compute cand_stats from a 100% pass.
+3. Base-only scores in `candidates_v2` (3.2). Re-export with the fixed code.
+4. Test pools denser than train: predicting more matches per entity may or may not be
+   right; one probe (add rank-2 candidates with p >= 0.3) settles it.
+5. Recall target 98-99% not reached (97.0%; lexical ceiling ~98.4%: ~15% of remaining
+   misses changed both house number and name). Cheap levers: cap 40 (+0.3), more k for
+   the address pass, `max_df` 0.01, `max_bucket` 40 — measure each on the 1% sample first.
 
 ## 5. Code map
-
-Canonical location: GitHub, branch `sparse-dot-topn-blocking`.
-`https://github.com/manoj2005mj/Amazon_ML_Challenge`
-
-> The working clone used during development lives under a **temp scratchpad
-> directory and is ephemeral**. Clone fresh from GitHub.
-
 ```
+cleaning/                 rules.py clean.py learn_dictionary.py segment.py dictionary.json
 blocking_strategies/
-  harness/
-    textnorm.py     normalization variants (transliterate, squeeze, legal-strip)
-    dataio.py       RecordSet, Arrow-backed columns, Parquet normalization cache
-    metrics.py      BlockingScorer, the F0.5-ceiling metric
-    runner.py       Strategy protocol + single-strategy CLI + REGISTRY
-    make_fixture.py builds the 1/25 dev fixture
-  strategies/
-    exact_baseline.py        the shipped baseline, re-implemented to the contract
-    token_idf.py             rare-token inverted index      <- BEST PRACTICAL
-    tfidf_topn.py            char n-gram + sparse_dot_topn (name/addr/fused)
-    sorted_neighbourhood.py  multi-pass sorted neighbourhood
-    minhash_lsh.py           vectorized banded MinHash
-    simhash_lsh.py           random-hyperplane LSH (UNTUNED)
-    cascade.py               RRF fusion of several strategies  <- BEST CEILING
-  benchmark.py      sequential sweep driver (subprocess per run)
-docs/
-  BLOCKING_EVALUATION.md    full methodology + results + corrections
-runs/full/          9 full-data metric reports (JSON)
-runs/fixture/       14 fixture metric reports (JSON)
+  harness/                textnorm.py (letter-only squeeze) dataio.py metrics.py runner.py (REGISTRY: union_passes added)
+  strategies/             union_passes.py (new) token_idf_fast.py cascade.py tfidf_topn.py ...
+  export_candidates.py    --strategy --param KEY=VALUE --s1-fraction (train only) --no-tsv
+  missed_links.py         bucket missed links by cause (needs _norm_cache of the data dir)
+matching/                 common.py (ER_DATASET/ER_CANDIDATES/ER_WORK) prep_entities.py (sidecar) cand_stats.py
+                          sample.py (restricted to exported entities) features.py train_full.py
+                          (--rounds --learning-rate --num-leaves --feature-fraction --min-data-in-leaf)
+                          train_eval.py predict.py france.py
+docs/                     EDA_REPORT.md, charts/ (figures + the EDA scripts), BLOCKING_EVALUATION.md
+runs/clean/               blocking reports on cleaned data
 ```
 
-**Strategy contract** — to add one, implement:
-
-```python
-class MyStrategy:
-    columns = ("name_key", "addr_key")   # which cached columns to load
-    name: str
-    params: dict
-    def block(self, s1, cand, country) -> scipy.sparse.csr_matrix:
-        """len(s1) x len(cand). Entry (i,j) means cand[j] is a candidate
-        for s1[i]. Value = your score. Top-K/threshold is YOUR job."""
-```
-
-then add it to `REGISTRY` in `runner.py`. Registry keys currently available:
-`exact_baseline`, `token_idf`, `tfidf_name`, `tfidf_addr`, `tfidf_fused`,
-`sorted_neighbourhood`, `minhash_lsh`, `simhash_lsh`, `cascade`.
-
----
-
-## 6. Environment and gotchas
-
-- **Windows 11, 16 GB RAM, 16 logical cores, Python 3.12.3.** RAM is the binding
-  constraint; typically only 3-6 GB free.
-- **Always set `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1` before running.** The
-  console is cp1252 and any strategy printing an Indic-script key crashes the
-  process on *encode*, which looks like a logic bug and is not.
-- **Run benchmarks one at a time.** `benchmark.py` uses a subprocess per run
-  deliberately: an in-process loop never returns the previous run's matrices to
-  the OS, and two concurrent full-scale runs do not fit in 16 GB.
-- **Normalization cache persists and is worth protecting**: 824 MB at
-  `dataset/train/_norm_cache/*.parquet`. Building it takes ~4 min per source
-  file. It is keyed on a hash of `textnorm.py`, so **editing any normalizer
-  silently invalidates it and forces a 12-minute rebuild**. Intentional, but
-  budget for it.
-- The dev fixture (`data/dev_fixture/`, 82 MB) is gitignored and rebuildable.
-- Installed beyond the usual: `sparse_dot_topn` 1.2.0, `Unidecode`, `datasketch`,
-  `rapidfuzz`, `psutil`, `pyarrow`.
-
-### Commands
-
+## 6. Commands (run from `src/`, with the env vars of section 3)
 ```bash
-export PYTHONIOENCODING=utf-8 PYTHONUTF8=1     # always
-
-# score one strategy on full training data (1% query sample)
-python -m blocking_strategies.harness.runner token_idf \
-    --data-dir "<dataset>/train" --sample-fraction 0.01 \
-    --param k=20 --param max_df=0.005
-
-# build the fast dev fixture (seconds per run instead of minutes)
-python -m blocking_strategies.harness.make_fixture \
-    --train-dir "<dataset>/train" --out-dir data/dev_fixture
-
-# run a sweep sequentially; resumable (completed runs are skipped)
-python -m blocking_strategies.benchmark \
-    --sample-fraction 0.01 --runs-dir runs/full --sweep-file runs/sweep_full.json
+# cleaning (once)
+python -m cleaning.learn_dictionary --data-dir "$ER_ROOT/student_resource/dataset" --workers 8
+python -m cleaning.clean --split train --in-dir "$ER_ROOT/student_resource/dataset/train" --out-dir "$ER_DATASET/train" --workers 10
+python -m cleaning.clean --split test  --in-dir "$ER_ROOT/student_resource/dataset/test"  --out-dir "$ER_DATASET/test"  --workers 10
+# measure a blocking config on the 1% sample (builds caches on first use, ~10 min, then ~5 min)
+python -m blocking_strategies.harness.runner union_passes --data-dir "$ER_DATASET/train" --sample-fraction 0.01 --param cap=30 --out runs/clean/x.json
+# export (test all entities; train 100% next time)
+python -m blocking_strategies.export_candidates --split test  --strategy union_passes --data-dir "$ER_DATASET/test"  --out-dir "$ER_CANDIDATES/test"  --no-tsv
+python -m blocking_strategies.export_candidates --split train --strategy union_passes --data-dir "$ER_DATASET/train" --out-dir "$ER_CANDIDATES/train" --no-tsv
+# matcher
+python -m matching.prep_entities --split train && python -m matching.prep_entities --split test
+python -m matching.cand_stats --split train && python -m matching.cand_stats --split test
+python -m matching.sample --fraction 0.10 --name sample10
+python -m matching.features --split train --full --shards 4 --workers 8      # ~80 min per 66M pairs
+python -m matching.features --split test  --full --shards 2 --workers 8      # ~2 h per 104M pairs
+python -m matching.train_full --features "full_train/features_*.parquet" --tag full   # ~50 min
+python -m matching.predict --model "$ER_WORK/full/model.txt" --rule '{"name":"expected_f","exclusive":true,"miss":0.15,"gamma":2.0}' --tag full --out-dir "$ER_ROOT/output_v2"
+cd "$ER_ROOT/student_resource" && python utils/validate_submission.py --matching ../output_v2/matching_results.tsv --candidate ../output_v2/candidate_pairs.tsv --test-dir dataset/test
 ```
+Timings measured today (16 cores, 16 GB): cleaning 25 min; union export 53 min (test) /
+51 min (train 50%); prep 16 min; features 3.3 h total; train 50 min; predict 1 h.
 
----
+## 7. Environment and gotchas
+- Windows 11, 16 GB RAM (often only 1-3 GB free), RTX 3050 4 GB (unused), Python 3.12.
+  Run heavy jobs **one at a time**; multiprocessing is spawn-based.
+- Always set `PYTHONIOENCODING=utf-8 PYTHONUTF8=1` (cp1252 console).
+- `candidates/` (v1) cannot be moved while another session holds it open; use
+  `ER_CANDIDATES` to point at another folder instead.
+- Kaggle runner (`kaggle/kjob.py`, user `pragadhishraaj`) is ~2.8x slower for LightGBM;
+  use it only for runs that need the RAM.
+- Earlier session transcripts were exported to `Downloads/session-export-*.zip`.
 
-## 7. What to do next, in priority order
-
-**1. ~~Write the export path and produce the candidate files.~~ DONE** — see
-section 3. Regenerate with:
-
-```bash
-python -m blocking_strategies.export_candidates --split test --data-dir <dataset>/test --out-dir <out>/test
-python -m blocking_strategies.export_candidates --split train --data-dir <dataset>/train --out-dir <out>/train
-```
-
-Resumable: finished `parts/*.parquet` are skipped on a rerun.
-
-**2. Build the matcher. START HERE.** The ceiling for the exported file is 0.953 and the actual score is 0. Every
-point here is worth far more than further blocking work. Suggested features: the
-blocking scores themselves (token-IDF overlap, name cosine, address cosine),
-`rapidfuzz` ratios, and **numeric-token agreement** (house numbers, PIN codes) —
-finding 2 predicts that last one will be strong. Gradient boosting on pair
-features is the obvious first model. Training on blocking's own output gives
-hard negatives for free and matches the inference distribution.
-
-**3. Tune the decision rule for F0.5, not accuracy.** A single global threshold
-is the wrong shape. Exploit: singletons are 5.58% of entities and a correct
-empty prediction is worth a full 1.0, so an explicit no-match decision is needed;
-and mean matches per entity is 3.46, so predicting sets of roughly the right
-*size* matters more than calibrating individual pair scores.
-
-**4. France.** 259,452 mandatory test rows, zero French training data, nothing
-validated on them. Unhedged risk.
-
-**5. Speed, if needed.** Three levers, cheapest first:
-   - `max_df` is the dominant cost term (retrieval is linear in it). Currently
-     `0.005` = 15,850 postings/token against 3.17M — very loose. Finding 3 says
-     the tokens you would drop first are the least discriminative.
-   - `np.add.at` in `token_idf` retrieval is a known NumPy slow path;
-     `np.bincount(inverse, weights=...)` computes the same thing in C.
-   - ~~**Reframe rare-token scoring as a sparse matmul.**~~ DONE as `token_idf_fast`. `score = Q @ P` where Q
-     is queries x tokens (IDF-weighted) and P is tokens x candidates (binary) —
-     which means `sparse_dot_topn` can run it with an OpenMP C++ inner loop and
-     built-in top-K, replacing the per-row Python loop. This does not contradict
-     the finding above: that was about the *representation* (char n-grams),
-     this reuses the *engine* with the better representation. Plausibly 5-20x.
-   - Note on multiprocessing: awkward here. Windows has no `fork`, so each
-     worker copies the ~4 GB index. Threads are better (NumPy releases the GIL
-     on sort/bincount/argpartition and they share the index for free), but the
-     matmul reframing subsumes this since `sparse_dot_topn` is already threaded.
-
-**6. Optional.** Tune `simhash_lsh`; re-run the top strategies at 5-10% to firm
-up the tails (not needed for the headline ranking); analyse the ~6% of links
-still missed to decide what blocking pass would catch them.
+## 8. Suggested order for the next session
+1. Read the two leaderboard scores (v2 main, France-empty probe); compute France's F0.5.
+2. If v3 validation > 0.9755 (`work/match_v2/full_v3/results.json`), predict into `output_v3/`.
+3. If France over-predicts: threshold its rows higher or use a no-competition-feature model.
+4. With >= 8 h: re-export train at 100% with the fixed scorer, recompute features, retrain.
+5. Fill `Documentation_template.md` (EDA §2.1 from docs/EDA_REPORT.md; blocking §3 from
+   section 3.2 here; model §4 from matching/features.py; results §5 from sections 3.3-3.4)
+   and build the zip (`output/` must hold the final pair of files).

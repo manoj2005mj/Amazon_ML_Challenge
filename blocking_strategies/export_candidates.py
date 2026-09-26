@@ -65,15 +65,38 @@ def main() -> int:
     ap.add_argument("--max-df", type=float, default=0.005)
     ap.add_argument("--n-threads", type=int, default=None)
     ap.add_argument("--no-tsv", action="store_true")
+    ap.add_argument("--strategy", default="token_idf_fast", help="registry key (token_idf_fast | union_passes | ...)")
+    ap.add_argument("--s1-fraction", type=float, default=1.0, help="deterministic hash sample of Source-1 entities to export (train only)")
+    ap.add_argument("--param", action="append", default=[], metavar="KEY=VALUE", help="strategy keyword argument (JSON value)")
     args = ap.parse_args()
 
     parts_dir = args.out_dir / "parts"
     parts_dir.mkdir(parents=True, exist_ok=True)
-    strategy = RareTokenMatmul(k=args.k, max_df=args.max_df, n_threads=args.n_threads)
+    if args.strategy == "token_idf_fast" and not args.param:
+        strategy = RareTokenMatmul(k=args.k, max_df=args.max_df, n_threads=args.n_threads)
+    else:
+        from .harness.runner import resolve
+        kwargs = {}
+        for item in args.param:
+            key, _, raw = item.partition("=")
+            try:
+                kwargs[key] = json.loads(raw)
+            except json.JSONDecodeError:
+                kwargs[key] = raw
+        if args.n_threads:
+            kwargs.setdefault("n_threads", args.n_threads)
+        strategy = resolve(args.strategy)(**kwargs)
+    print(f"strategy {strategy.name} params {getattr(strategy, 'params', {})}", flush=True)
     prefix = args.split
     started = time.perf_counter()
 
     s1 = load_source(args.data_dir / f"{prefix}_source1.tsv")
+    if args.s1_fraction < 1.0:
+        if args.split != "train":
+            raise SystemExit("--s1-fraction is only valid for --split train (the test submission needs every entity)")
+        from .harness.dataio import hash_sample_mask
+        s1 = s1.take(hash_sample_mask(s1.entity_id, args.s1_fraction))
+        print(f"exporting {len(s1):,} Source-1 entities ({args.s1_fraction:.0%} hash sample)", flush=True)
     sources = {
         "S2": load_source(args.data_dir / f"{prefix}_source2.tsv"),
         "S3": load_source(args.data_dir / f"{prefix}_source3.tsv"),
@@ -123,7 +146,7 @@ def main() -> int:
             del frame
 
     (args.out_dir / "export_stats.json").write_text(
-        json.dumps({"k": args.k, "max_df": args.max_df, "parts": stats}, indent=2)
+        json.dumps({"strategy": strategy.name, "params": getattr(strategy, "params", {"k": args.k, "max_df": args.max_df}), "parts": stats}, indent=2)
     )
 
     if not args.no_tsv:
